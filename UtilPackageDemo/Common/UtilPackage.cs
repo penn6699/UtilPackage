@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
+using System.Reflection;
 using System.Web;
 
 
@@ -249,6 +251,169 @@ public class UtilPackage
     }
 
 
+
+    #region 检查sql参数值是否包含敏感字符（反注入）
+
+    private const string SqlKeyWord = @" insert into | delete from | count(| drop table | update | truncate | asc( | mid( | char( | xp_cmdshell | exec master | netlocalgroup administrators | net user | or | and |;";
+    /// <summary>
+    /// 检查sql参数值是否包含敏感字符（反注入）
+    /// </summary>
+    /// <param name="value"></param>
+    public string CheckSqlParameterValue(string value, string name)
+    {
+        string[] SqlKeyWords = SqlKeyWord.Split(new char[] { '|' });
+        bool isHasKeyWord = false;
+        string _keyword = "";
+        foreach (string keyword in SqlKeyWords)
+        {
+            isHasKeyWord = value.Contains(keyword);
+            if (isHasKeyWord)
+            {
+                _keyword = keyword;
+                break;
+            }
+        }
+
+        if (isHasKeyWord)
+        {
+            throw new Exception(name + "值包含SQL敏感字符：\"" + _keyword + "\"。");
+        }
+
+        return value;
+
+    }
+
+    #endregion
+
+
+    /// <summary>
+    /// 类转换器
+    /// </summary>
+    /// <typeparam name="TIn"></typeparam>
+    /// <typeparam name="TOut"></typeparam>
+    public static class ClassConvertor<TIn, TOut>
+    {
+
+        private static readonly Func<TIn, TOut> cache = GetFunc();
+        private static Func<TIn, TOut> GetFunc()
+        {
+            ParameterExpression parameterExpression = Expression.Parameter(typeof(TIn), "p");
+            List<MemberBinding> memberBindingList = new List<MemberBinding>();
+
+            foreach (var item in typeof(TOut).GetProperties())
+            {
+                if (!item.CanWrite)
+                    continue;
+
+                MemberExpression property = Expression.Property(parameterExpression, typeof(TIn).GetProperty(item.Name));
+                MemberBinding memberBinding = Expression.Bind(item, property);
+                memberBindingList.Add(memberBinding);
+            }
+
+            foreach (var item in typeof(TOut).GetFields())
+            {
+                MemberExpression field = Expression.Field(parameterExpression, typeof(TIn).GetField(item.Name));
+                MemberBinding memberBinding = Expression.Bind(item, field);
+                memberBindingList.Add(memberBinding);
+            }
+
+            MemberInitExpression memberInitExpression = Expression.MemberInit(Expression.New(typeof(TOut)), memberBindingList.ToArray());
+            Expression<Func<TIn, TOut>> lambda = Expression.Lambda<Func<TIn, TOut>>(memberInitExpression, new ParameterExpression[] { parameterExpression });
+
+            return lambda.Compile();
+        }
+        /// <summary>
+        /// 转换
+        /// </summary>
+        /// <param name="tIn"></param>
+        /// <returns></returns>
+        public static TOut Convert(TIn tIn)
+        {
+            return cache(tIn);
+        }
+
+    }
+
+    /// <summary>
+    /// 对象深拷贝
+    /// </summary>
+    /// <param name="obj">被复制对象</param>
+    /// <returns>新对象</returns>
+    public static object CopyOjbect(object obj)
+    {
+        if (obj == null)
+        {
+            return null;
+        }
+        object targetDeepCopyObj;
+        Type targetType = obj.GetType();
+        //值类型  
+        if (targetType.IsValueType == true)
+        {
+            targetDeepCopyObj = obj;
+        }
+        //引用类型   
+        else
+        {
+            targetDeepCopyObj = Activator.CreateInstance(targetType);   //创建引用对象   
+            MemberInfo[] memberCollection = obj.GetType().GetMembers();
+
+            foreach (MemberInfo member in memberCollection)
+            {
+                //拷贝字段
+                if (member.MemberType == MemberTypes.Field)
+                {
+                    FieldInfo field = (FieldInfo)member;
+                    object fieldValue = field.GetValue(obj);
+                    if (fieldValue is ICloneable)
+                    {
+                        field.SetValue(targetDeepCopyObj, (fieldValue as ICloneable).Clone());
+                    }
+                    else
+                    {
+                        field.SetValue(targetDeepCopyObj, CopyOjbect(fieldValue));
+                    }
+
+                }
+                //拷贝属性
+                else if (member.MemberType == MemberTypes.Property)
+                {
+                    PropertyInfo myProperty = (PropertyInfo)member;
+                    MethodInfo info = myProperty.GetSetMethod(false);
+                    if (info != null)
+                    {
+                        try
+                        {
+                            object propertyValue = myProperty.GetValue(obj, null);
+                            if (propertyValue is ICloneable)
+                            {
+                                myProperty.SetValue(targetDeepCopyObj, (propertyValue as ICloneable).Clone(), null);
+                            }
+                            else
+                            {
+                                myProperty.SetValue(targetDeepCopyObj, CopyOjbect(propertyValue), null);
+                            }
+                        }
+                        catch
+                        {
+                            return null;
+                        }
+                    }
+                }
+            }
+        }
+        return targetDeepCopyObj;
+    }
+    /// <summary>
+    /// 拷贝对象
+    /// </summary>
+    /// <typeparam name="T">泛型</typeparam>
+    /// <param name="obj">被复制对象</param>
+    /// <returns>新对象</returns>
+    public static T Copy<T>(T obj) where T : class
+    {
+        return CopyOjbect(obj) as T;
+    }
 
 }
 

@@ -138,8 +138,9 @@ public class UtilPackage
     /// <param name="fileSize">文件大小。单位：字节（B）</param>
     /// <param name="places">结果四舍五入后的小数位数</param>
     /// <returns></returns>
-    public static string GetFileSizeString(long fileSize, int places = 2) {
-        
+    public static string GetFileSizeString(long fileSize, int places = 2)
+    {
+
         string[] sizes = new string[] { "B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB", "BB", "NB", "DB", "CB" };
         int k = 1024, i = 0;
         double value = 0;
@@ -153,45 +154,33 @@ public class UtilPackage
             value = Round((fileSize / Math.Pow(k, i)), places);
         }
         return value + ' ' + sizes[i];
-        
+
     }
+
     #region MD5
 
     /// <summary>
     /// MD5 加密 加密后密文为小写
     /// </summary>
     /// <param name="strByte">待加密的字节</param>
-    /// <param name="len">密文字符串长度。16/32</param>
+    /// <param name="is16Bit">是否16位</param>
     /// <returns></returns>
-    public static string Md5(byte[] strByte,int len=32)
+    public static string Md5(byte[] strByte, bool is16Bit = false)
     {
         System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create();
         byte[] md5Bytes = md5.ComputeHash(strByte);
-        if (len == 16)
-        {
-            //将指定的字节子数组的每个元素的数值转换为它的等效十六进制字符串表示形式。
-            string md5_16Str = BitConverter.ToString(md5Bytes, 4, 8);
-            return md5_16Str.Replace("-", "").ToLower();
-        }
-        else
-        {
-            string md5Str = "";
-            for (int i = 0; i < md5Bytes.Length; i++)
-            {
-                // 将得到的字符串使用十六进制类型格式。格式后的字符是小写的字母，如果使用大写（X）则格式后的字符是大写字符 
-                md5Str += md5Bytes[i].ToString("x");
-            }
-            return md5Str;
-        }
+        string md5Str = is16Bit ? BitConverter.ToString(md5Bytes, 4, 8) : BitConverter.ToString(md5Bytes);
+        return md5Str.Replace("-", "").ToLower();
     }
     /// <summary>
     /// MD5 32位加密 加密后密文为小写
     /// </summary>
     /// <param name="str"></param>
+    /// <param name="is16Bit">是否16位</param>
     /// <returns></returns>
-    public static string Md5(string str)
+    public static string Md5(string str, bool is16Bit = false)
     {
-        return Md5(System.Text.Encoding.UTF8.GetBytes(str), 32);
+        return Md5(System.Text.Encoding.UTF8.GetBytes(str), is16Bit);
     }
     /// <summary>
     ///MD5 16位加密 加密后密文为小写
@@ -200,7 +189,7 @@ public class UtilPackage
     /// <returns></returns>
     public static string Md5To16Bit(string str)
     {
-        return Md5(System.Text.Encoding.UTF8.GetBytes(str), 16);
+        return Md5(System.Text.Encoding.UTF8.GetBytes(str), true);
     }
     #endregion
 
@@ -224,7 +213,8 @@ public class UtilPackage
     /// <returns></returns>
     public static double[] ckqy(double num, int k)
     {
-        if (k == 0) {
+        if (k == 0)
+        {
             return new double[] { };
         }
 
@@ -233,8 +223,6 @@ public class UtilPackage
         {
             var s = Math.Floor(num / k);
             var _y = num % k;
-            //console.log(num, s, _y);
-            //console.log(num + " ÷ " + k + " ＝ " + s + "···" + _y);
             if (s == 0)
             {
                 y.Add(num);
@@ -249,6 +237,7 @@ public class UtilPackage
 
         return y.ToArray().Reverse().ToArray();
     }
+
 
 
 
@@ -414,13 +403,101 @@ public class UtilPackage
     {
         return CopyOjbect(obj) as T;
     }
+    /// <summary>
+    /// 获取文件扩展名
+    /// </summary>
+    /// <param name="fileName"></param>
+    /// <returns></returns>
+    public static string GetFileExtension(string fileName)
+    {
+        try
+        {
+            return System.IO.Path.GetExtension(fileName);
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// 更新对象
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="obj"></param>
+    /// <param name="par"></param>
+    /// <returns></returns>
+    public static T UdateObject<T>(T obj, Dictionary<string, object> par) where T : class
+    {
+        Type type = obj.GetType();
+        foreach (KeyValuePair<string, object> kvp in par)
+        {
+            PropertyInfo pInfo = type.GetProperty(kvp.Key);
+            if (pInfo != null)
+            {
+                try
+                {
+                    var pValue = kvp.Value;
+                    if (!(Convert.IsDBNull(pValue) || pValue == null))
+                    {
+                        object pVal = null;
+                        if (pInfo.PropertyType.ToString().Contains("System.Nullable"))
+                        {
+                            pVal = Convert.ChangeType(pValue, Nullable.GetUnderlyingType(pInfo.PropertyType));
+                        }
+                        else
+                        {
+                            pVal = Convert.ChangeType(pValue, pInfo.PropertyType);
+                        }
+                        pInfo.SetValue(obj, pVal);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    throw new Exception("属性[" + pInfo.Name + "]转换出错," + ex.Message, ex);
+                }
+            }
+
+
+            FieldInfo fInfo = type.GetField(kvp.Key);
+            if (fInfo != null)
+            {
+                try
+                {
+                    var fValue = kvp.Value;
+                    if (!(Convert.IsDBNull(fValue) || fValue == null))
+                    {
+                        object fVal = null;
+                        if (fInfo.FieldType.ToString().Contains("System.Nullable"))
+                        {
+                            fVal = Convert.ChangeType(fValue, Nullable.GetUnderlyingType(fInfo.FieldType));
+                        }
+                        else
+                        {
+                            fVal = Convert.ChangeType(fValue, fInfo.FieldType);
+                        }
+                        fInfo.SetValue(obj, fVal);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    throw new Exception("字段[" + fInfo.Name + "]转换出错," + ex.Message, ex);
+                }
+            }
+        }
+
+
+
+        return obj;
+    }
 
 }
+
+#region  enum
+
 
 /// <summary>
 /// 文件大小单位
 /// </summary>
-public enum FileSizeUnit {
+public enum FileSizeUnit
+{
     /// <summary>
     /// 比特
     /// </summary>
@@ -479,4 +556,6 @@ public enum FileSizeUnit {
     CB = 12
 }
 
+
+#endregion
 
